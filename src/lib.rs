@@ -81,13 +81,13 @@ mod parser {
                 })
                 .labelled("abstraction");
 
-            abstraction
+            abstraction.then_ignore(end())
         })
     }
 }
 
 pub fn run(input: &str) {
-    let mut lexer = lexer::Token::lexer(input);
+    let lexer = lexer::Token::lexer(input);
     let length = lexer.source().len();
 
     match parser::expr_parser().parse(Stream::from_iter(length..length + 1, lexer.spanned())) {
