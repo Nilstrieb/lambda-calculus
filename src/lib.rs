@@ -23,7 +23,8 @@ mod lexer {
         #[token(")")]
         ParenC,
 
-        #[regex("[a-zA-Z]+")]
+        #[regex("[a-z]")]
+        #[regex("[A-Z]+[0-9]*")]
         Ident(&'a str),
 
         #[error]
@@ -54,11 +55,11 @@ mod parser {
     pub enum Expr {
         Name(String),
         Application {
-            function: Box<Expr>,
+            callee: Box<Expr>,
             argument: Box<Expr>,
         },
         Abstraction {
-            args: Vec<char>,
+            params: Vec<char>,
             body: Box<Expr>,
         },
     }
@@ -71,20 +72,40 @@ mod parser {
             })
             .labelled("ident");
 
+            let parameters = ident
+                .map(|ident| ident.chars().collect::<Vec<_>>())
+                .labelled("parameters");
+
             let abstraction = just(Token::Lambda)
-                .ignore_then(ident)
+                .ignore_then(parameters)
                 .then_ignore(just(Token::Dot))
-                .then(expr)
-                .map(|(args, body)| Expr::Abstraction {
-                    args: args.chars().collect(),
+                .then(expr.clone())
+                .map(|(params, body)| Expr::Abstraction {
+                    params,
                     body: Box::new(body),
                 })
                 .labelled("abstraction");
 
-            ident
-                .or(abstraction)
-                .or(expr.delimited_by(Token::ParenO, Token::ParenC))
+            let name_expr = ident
+                .map(|ident| Expr::Name(ident.to_string()))
+                .labelled("name");
+
+            let application = expr
+                .clone()
+                .then(expr.clone())
+                .map(|(callee, arg)| Expr::Application {
+                    callee: Box::new(callee),
+                    argument: Box::new(arg),
+                })
+                .labelled("application");
+
+            abstraction
+                .or(expr.clone().delimited_by(Token::ParenO, Token::ParenC))
+                .or(name_expr)
+                .or(expr)
+                .or(application)
                 .then_ignore(end())
+                .labelled("expression")
         })
     }
 }
@@ -93,7 +114,12 @@ pub fn run(input: &str) {
     let lexer = lexer::Token::lexer(input);
     let length = lexer.source().len();
 
-    match parser::expr_parser().parse(Stream::from_iter(length..length + 1, lexer.spanned())) {
+    match parser::expr_parser().parse(Stream::from_iter(
+        length..length + 1,
+        lexer.spanned().inspect(|val| {
+            dbg!(val);
+        }),
+    )) {
         Ok(ast) => println!("parsed: {ast:#?}"),
         Err(errs) => errs
             .into_iter()
