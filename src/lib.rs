@@ -81,7 +81,10 @@ mod parser {
                 })
                 .labelled("abstraction");
 
-            abstraction.then_ignore(end())
+            ident
+                .or(abstraction)
+                .or(expr.delimited_by(Token::ParenO, Token::ParenC))
+                .then_ignore(end())
         })
     }
 }
